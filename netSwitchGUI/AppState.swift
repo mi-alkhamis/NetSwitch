@@ -4,7 +4,6 @@ import NetSwitchCore
 
 @MainActor
 final class AppState: ObservableObject {
-    static let placeholderWiFiName = "WIF-NAME"
     static let defaultService = "Wi-Fi"
 
     @Published private(set) var profiles: [Profile] = []
@@ -65,29 +64,46 @@ final class AppState: ObservableObject {
             }
         }
     }
+    func requestWiFiAuthorization() {
+        WiFiAuthorization.shared.requestAuthorization { [weak self] in
+            self?.refreshNetworkInfo()
+        }
+    }
+    
 
     var selectedProfile: Profile? {
         profiles.first { $0.id == selectedProfileID }
     }
 
     var wifiName: String {
-        Self.placeholderWiFiName
+        networkInfo.ssid
     }
 
     func refreshNetworkInfo() {
+        guard !isRefreshing else { return }
         isRefreshing = true
 
-        defer {
-            isRefreshing = false
-        }
+        Task {
+            do {
+                let (info, wifi) = try await Task.detached(priority: .userInitiated) {
+                    let info = try NetworkClient.info(for: Self.defaultService)
+                    let wifi = NetworkClient.wifiStatus()
+                    return (info, wifi)
+                }.value
 
-        do {
-            networkInfo = try NetworkClient.info(for: Self.defaultService)
-        } catch {
-            showError(
-                title: "Could Not Refresh Network Status",
-                error: error
-            )
+                self.networkInfo = info
+                self.wifiSignal = wifi.signalStrength
+                self.wifiEncryption = wifi.encryption
+                self.wifiChannel = wifi.channel
+                self.wifiBand = wifi.band
+                self.isRefreshing = false
+            } catch {
+                self.isRefreshing = false
+                self.showError(
+                    title: "Could Not Refresh Network Status",
+                    error: error
+                )
+            }
         }
     }
 
@@ -151,28 +167,52 @@ final class AppState: ObservableObject {
             )
         }
     }
-
-    func apply(_ profile: Profile) {
-        isApplying = true
-
-        defer {
-            isApplying = false
-        }
-
+    func delete(_ profile: Profile) {
         do {
-            try NetworkClient.apply(profile)
-            refreshNetworkInfo()
+            try profileStore.delete(name: profile.name)
+            reloadProfiles()
+            if selectedProfileID == profile.id {
+                selectedProfileID = profiles.first?.id
+            }
 
             alert = AppAlert(
                 kind: .success,
-                title: "Profile Applied",
-                message: "\"\(profile.name)\" was applied to \(profile.service)."
+                title: "Profile Deleted",
+                message: "\"\(profile.name)\" was removed."
             )
         } catch {
             showError(
-                title: "Could Not Apply Profile",
+                title: "Could Not Delete Profile",
                 error: error
             )
+        }
+    }
+
+    func apply(_ profile: Profile) {
+        guard !isApplying else { return }
+        isApplying = true
+
+        Task {
+            do {
+                try await Task.detached(priority: .userInitiated) {
+                    try NetworkClient.apply(profile)
+                }.value
+
+                self.isApplying = false
+                self.refreshNetworkInfo()
+
+                self.alert = AppAlert(
+                    kind: .success,
+                    title: "Profile Applied",
+                    message: "\"\(profile.name)\" was applied to \(profile.service)."
+                )
+            } catch {
+                self.isApplying = false
+                self.showError(
+                    title: "Could Not Apply Profile",
+                    error: error
+                )
+            }
         }
     }
 
@@ -244,4 +284,20 @@ final class AppState: ObservableObject {
 
         return backupFileURL
     }
+
+    // WiFi status (StatusView + MenuBar)
+    @Published var wifiSignal: Int = 0
+    @Published var wifiEncryption: String = ""
+    @Published var wifiChannel: Int = 0
+    @Published var wifiBand: String = ""
+
+    // Active profile detection
+    @Published var activeProfile: Profile? = nil
+
+    // WiFi scanning (WiFiScannerView)
+    @Published var wifiNetworks: [WiFiNetwork] = []
+    @Published var isScanningWiFi: Bool = false
+
+    func scanWiFi() { /* CoreWLAN scan */ }
+    func connect(to network: WiFiNetwork, password: String, save: Bool) { /* connect logic */ }
 }
