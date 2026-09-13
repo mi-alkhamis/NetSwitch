@@ -28,6 +28,48 @@ struct StatusView: View {
                     }
                 }
 
+                Section("Current Wi-Fi") {
+                    if appState.wifiName.isEmpty {
+                        NetworkStatusLabelRow(
+                            title: "Status",
+                            value: "Not Connected"
+                        )
+                    } else {
+                        NetworkStatusLabelRow(
+                            title: "Network Name",
+                            value: appState.wifiName
+                        )
+
+                        if !appState.wifiEncryption.isEmpty {
+                            NetworkStatusLabelRow(
+                                title: "Security",
+                                value: appState.wifiEncryption
+                            )
+                        }
+
+                        if !appState.wifiBand.isEmpty {
+                            NetworkStatusLabelRow(
+                                title: "Band",
+                                value: appState.wifiBand
+                            )
+                        }
+
+                        if appState.wifiChannel > 0 {
+                            NetworkStatusLabelRow(
+                                title: "Channel",
+                                value: "\(appState.wifiChannel)"
+                            )
+                        }
+
+                        if appState.wifiSignal != 0 {
+                            NetworkStatusLabelRow(
+                                title: "Signal Strength",
+                                value: "\(appState.wifiSignal) dBm"
+                            )
+                        }
+                    }
+                }
+
                 Section("Network Information") {
                     NetworkStatusLabelRow(
                         title: "Service",
