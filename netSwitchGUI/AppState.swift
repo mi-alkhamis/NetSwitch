@@ -12,6 +12,8 @@ final class AppState: ObservableObject {
     @Published private(set) var isRefreshing = false
     @Published private(set) var isApplying = false
     @Published var alert: AppAlert?
+    @Published var menuBarAlert: AppAlert?
+    
 
     private let profileStore: ProfileStore
 
@@ -189,6 +191,18 @@ final class AppState: ObservableObject {
     }
 
     func apply(_ profile: Profile) {
+        performApply(profile) { [weak self] alert in
+            self?.alert = alert
+        }
+    }
+
+    func applyFromMenuBar(_ profile: Profile) {
+        performApply(profile) { [weak self] alert in
+            self?.menuBarAlert = alert
+        }
+    }
+
+    private func performApply(_ profile: Profile, setAlert: @escaping (AppAlert) -> Void) {
         guard !isApplying else { return }
         isApplying = true
 
@@ -198,24 +212,39 @@ final class AppState: ObservableObject {
                     try NetworkClient.apply(profile)
                 }.value
 
-                self.isApplying = false
+                // configd applies changes asynchronously; give it a moment before
+                // reading state back, especially for static IP/DNS changes.
+                try? await Task.sleep(nanoseconds: 900_000_000) // 0.9s
                 self.refreshNetworkInfo()
 
-                self.alert = AppAlert(
+                // If we expected DNS servers but didn't see them yet, try once more
+                // after a slightly longer wait — static config can take a bit longer.
+                if !profile.dnsServers.isEmpty {
+                    try? await Task.sleep(nanoseconds: 1_200_000_000) // 1.2s
+                    if self.networkInfo.dnsServers.isEmpty {
+                        self.refreshNetworkInfo()
+                    }
+                }
+
+                self.isApplying = false
+
+                setAlert(AppAlert(
                     kind: .success,
                     title: "Profile Applied",
                     message: "\"\(profile.name)\" was applied to \(profile.service)."
-                )
+                ))
+
+                activeProfile = profile
             } catch {
                 self.isApplying = false
-                self.showError(
+                setAlert(AppAlert(
+                    kind: .error,
                     title: "Could Not Apply Profile",
-                    error: error
-                )
+                    message: error.localizedDescription
+                ))
             }
         }
     }
-
     private func reloadProfiles() {
         do {
             try profileStore.load()

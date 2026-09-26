@@ -14,9 +14,33 @@
 		C6EEB19D302F838F0083FB67 /* netSwitch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = netSwitch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		C60EEBAB3062FCA100D61334 /* Exceptions for "netSwitchGUI" folder in "netSwitch" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				"MenuBarView~.txt",
+			);
+			target = C6EEB19C302F838F0083FB67 /* netSwitch */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
+		C60EEBAC3062FCA100D61334 /* Exceptions for "netSwitchGUI" folder in "Compile Sources" phase from "netSwitch" target */ = {
+			isa = PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet;
+			buildPhase = C6EEB199302F838F0083FB67 /* Sources */;
+			membershipExceptions = (
+				"MenuBarView~.txt",
+			);
+		};
+/* End PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		C6EEB19F302F838F0083FB67 /* netSwitchGUI */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				C60EEBAB3062FCA100D61334 /* Exceptions for "netSwitchGUI" folder in "netSwitch" target */,
+				C60EEBAC3062FCA100D61334 /* Exceptions for "netSwitchGUI" folder in "Compile Sources" phase from "netSwitch" target */,
+			);
 			path = netSwitchGUI;
 			sourceTree = "<group>";
 		};

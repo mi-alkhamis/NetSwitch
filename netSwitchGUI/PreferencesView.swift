@@ -7,12 +7,14 @@ struct PreferencesView: View {
     // nothing for the system to reconstruct incorrectly on relaunch.
     private static let statusID = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
     private static let wifiID = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
+    
 
     @EnvironmentObject private var appState: AppState
 
     @State private var selection: UUID? = PreferencesView.statusID
     @State private var showingNewProfileEditor = false
     @State private var searchText = ""
+    @State private var localBanner: AppAlert?
 
     private var filteredProfiles: [Profile] {
         if searchText.isEmpty {
@@ -42,12 +44,32 @@ struct PreferencesView: View {
                 }
             }
         }
-        .alert(item: $appState.alert) { alert in
-            Alert(
-                title: Text(alert.title),
-                message: Text(alert.message),
-                dismissButton: .default(Text("OK"))
-            )
+        
+        .onChange(of: appState.alert?.id) { _, _ in
+            guard let newValue = appState.alert else { return }
+            localBanner = newValue
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                if localBanner?.id == newValue.id {
+                    localBanner = nil
+                }
+            }
+        }
+        .overlay(alignment: .top) {
+            if let localBanner {
+                HStack(spacing: 6) {
+                    Image(systemName: localBanner.kind == .success ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                        .foregroundStyle(localBanner.kind == .success ? .green : .red)
+                    Text(localBanner.message)
+                        .font(.caption)
+                        .lineLimit(2)
+                }
+                .padding(10)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+                .padding(.top, 10)
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .animation(.easeInOut(duration: 0.2), value: localBanner.id)
+            }
         }
     }
 
@@ -143,3 +165,4 @@ struct PreferencesView: View {
         }
     }
 }
+

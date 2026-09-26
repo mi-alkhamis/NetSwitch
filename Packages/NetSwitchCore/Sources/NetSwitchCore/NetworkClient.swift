@@ -99,10 +99,11 @@ public enum NetworkClient {
         info.ssid = (try? currentSSID(for: service)) ?? ""
 
         guard let store = SCDynamicStoreCreate(nil, "NetSwitch" as CFString, nil, nil),
-              let serviceID = serviceID(for: service) else {
+              let prefs = SCPreferencesCreate(nil, "NetSwitch" as CFString, nil),
+              let networkService = networkService(named: service, in: prefs) else {
             return info
         }
-
+        let serviceID = SCNetworkServiceGetServiceID(networkService) as String? ?? ""
         if let ipv4 = SCDynamicStoreCopyValue(store, "State:/Network/Service/\(serviceID)/IPv4" as CFString) as? [String: Any] {
             if let addrs = ipv4[kSCPropNetIPv4Addresses as String] as? [String], let first = addrs.first {
                 info.ipAddress = first
@@ -115,8 +116,9 @@ public enum NetworkClient {
             }
         }
 
-        if let dns = SCDynamicStoreCopyValue(store, "State:/Network/Service/\(serviceID)/DNS" as CFString) as? [String: Any],
-           let servers = dns[kSCPropNetDNSServerAddresses as String] as? [String] {
+        if let dnsProtocol = SCNetworkServiceCopyProtocol(networkService, kSCNetworkProtocolTypeDNS),
+           let config = SCNetworkProtocolGetConfiguration(dnsProtocol) as? [String: Any],
+           let servers = config[kSCPropNetDNSServerAddresses as String] as? [String] {
             info.dnsServers = servers
         }
 
@@ -186,14 +188,23 @@ public enum NetworkClient {
     }
 
     private static func setDNS(_ servers: [String], for service: String, prefs: SCPreferences) throws {
+
         guard let networkService = networkService(named: service, in: prefs) else {
             throw NetworkClientError.serviceNotFound(service)
         }
+
         guard let dnsProtocol = SCNetworkServiceCopyProtocol(networkService, kSCNetworkProtocolTypeDNS) else {
             throw NetworkClientError.protocolUnavailable("DNS")
         }
+
         let config: [String: Any] = servers.isEmpty ? [:] : [kSCPropNetDNSServerAddresses as String: servers]
-        guard SCNetworkProtocolSetConfiguration(dnsProtocol, config as CFDictionary) else {
+        let setConfigResult = SCNetworkProtocolSetConfiguration(dnsProtocol, config as CFDictionary)
+        guard setConfigResult else {
+            throw NetworkClientError.preferencesCommitFailed
+        }
+
+        let setEnabledResult = SCNetworkProtocolSetEnabled(dnsProtocol, true)
+        guard setEnabledResult else {
             throw NetworkClientError.preferencesCommitFailed
         }
     }
@@ -259,5 +270,13 @@ public enum NetworkClient {
             throw status == errAuthorizationCanceled ? NetworkClientError.authorizationDenied : NetworkClientError.authorizationFailed(status)
         }
         return auth
+    }
+    /// Converts a dotted-decimal subnet mask (e.g. "255.255.255.0") to CIDR notation (e.g. "/24").
+    /// Returns an empty string if the mask can't be parsed.
+    public static func cidrSuffix(forSubnetMask mask: String) -> String {
+        let parts = mask.split(separator: ".").compactMap { UInt8($0) }
+        guard parts.count == 4 else { return "" }
+        let bitCount = parts.reduce(0) { $0 + $1.nonzeroBitCount }
+        return "/\(bitCount)"
     }
 }

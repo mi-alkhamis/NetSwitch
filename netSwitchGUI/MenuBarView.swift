@@ -1,9 +1,19 @@
+//
+//  MenuBarView 2.swift
+//  netSwitch
+//
+//  Created by Milad Alkhamis on 9/22/26.
+//
+
+
 import SwiftUI
 import NetSwitchCore
+import Combine
 
 struct MenuBarView: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.openSettings) private var openSettings
+    @State private var localBanner: AppAlert?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -20,8 +30,8 @@ struct MenuBarView: View {
                 ConnectionBadge(isConnected: !appState.wifiName.isEmpty)
             }
 
-            // MARK: - Metrics Grid
-            metricsGrid
+            // MARK: - Network Details
+            networkSection
 
             // MARK: - Active/Other Profiles
             if let active = appState.activeProfile {
@@ -46,16 +56,36 @@ struct MenuBarView: View {
         .padding(14)
         .frame(width: 360)
         .onAppear { appState.refreshNetworkInfo() }
-        .alert(item: $appState.alert) { alert in
-            Alert(
-                title: Text(alert.title),
-                message: Text(alert.message),
-                dismissButton: .default(Text("OK"))
-            )
+        .onChange(of: appState.menuBarAlert?.id) { _, _ in
+            guard let newValue = appState.menuBarAlert else { return }
+            localBanner = newValue
+            appState.menuBarAlert = nil
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                if localBanner?.id == newValue.id {
+                    localBanner = nil
+                }
+            }
+        }
+        .overlay(alignment: .top) {
+            if let localBanner {
+                HStack(spacing: 6) {
+                    Image(systemName: localBanner.kind == .success ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                        .foregroundStyle(localBanner.kind == .success ? .green : .red)
+                    Text(localBanner.message)
+                        .font(.caption)
+                        .lineLimit(2)
+                }
+                .padding(8)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+                .padding(.top, 6)
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .animation(.easeInOut(duration: 0.2), value: localBanner.id)
+            }
         }
     }
 
-    // MARK: - Wi-Fi Status Header
+    // MARK: - Connection Badge
 
     private struct ConnectionBadge: View {
         let isConnected: Bool
@@ -75,44 +105,83 @@ struct MenuBarView: View {
         }
     }
 
-    private var metricsGrid: some View {
+    
+    private var networkSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            // Top row: Wi‑Fi name and signal/IP
-            HStack(alignment: .center, spacing: 10) {
-                metricCard(title: "Wi‑Fi", value: appState.wifiName.isEmpty ? "No Wi‑Fi connection" : appState.wifiName)
-                Spacer(minLength: 0)
-                HStack(spacing: 6) {
-                    SignalStrengthView(dbm: appState.wifiSignal)
-                    Text(appState.networkInfo.ipAddress)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fontDesign(.monospaced)
-                }
+            // Signal indicator before SSID — no IP here anymore, shown below instead
+            HStack(spacing: 10) {
+                SignalStrengthView(dbm: appState.wifiSignal)
+
+                Text(appState.wifiName.isEmpty ? "No Wi‑Fi connection" : appState.wifiName)
+                    .font(.system(.body, design: .rounded).weight(.semibold))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+
+                Spacer(minLength: 8)
+            }
+            .padding(.horizontal, 2)
+
+            // IP+CIDR and Gateway side by side — denser, less empty space
+            HStack(spacing: 10) {
+                metricCard(
+                    title: "IP Address",
+                    value: ipAddressWithCIDR
+                )
+                metricCard(
+                    title: "Gateway",
+                    value: appState.networkInfo.gateway
+                )
             }
 
-            // Grid of network details
-            Grid(horizontalSpacing: 10, verticalSpacing: 10) {
-                GridRow {
-                    metricCard(title: "IP Address", value: appState.networkInfo.ipAddress)
-                    metricCard(title: "Subnet Mask", value: appState.networkInfo.subnetMask)
-                }
-                GridRow {
-                    metricCard(title: "Gateway", value: appState.networkInfo.gateway)
-                    metricCard(title: "DNS Servers", value: appState.networkInfo.dnsServers.joined(separator: "  "))
-                }
-            }
+            dnsCard
         }
     }
 
+    private var ipAddressWithCIDR: String {
+        let ip = appState.networkInfo.ipAddress
+        guard !ip.isEmpty, ip != "—" else { return ip }
+        let suffix = NetworkClient.cidrSuffix(forSubnetMask: appState.networkInfo.subnetMask)
+        return suffix.isEmpty ? ip : "\(ip)\(suffix)"
+    }
+
     private func metricCard(title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 4) {
             Text(title.uppercased())
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
+
             Text(value.isEmpty ? "—" : value)
                 .font(.system(.body, design: .monospaced).weight(.medium))
                 .lineLimit(1)
                 .truncationMode(.middle)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.background.opacity(0.6))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    // MARK: - DNS Card (full-width, one line per server)
+
+    private var dnsCard: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("DNS SERVERS")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            if appState.networkInfo.dnsServers.isEmpty {
+                Text("System default")
+                    .font(.system(.body, design: .monospaced).weight(.medium))
+                    .foregroundStyle(.secondary)
+            } else {
+                Text(appState.networkInfo.dnsServers.joined(separator: ", "))
+                    .font(.system(.body, design: .monospaced).weight(.medium))
+                    .lineLimit(1)
+            }
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -129,6 +198,10 @@ struct MenuBarView: View {
     private func activeProfileSection(_ profile: Profile) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.green)
+
                 Text("Active Profile")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
@@ -136,13 +209,9 @@ struct MenuBarView: View {
 
                 Spacer()
 
-                HStack(spacing: 3) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.caption2)
-                    Text("Applied")
-                }
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.green)
+                Text("Applied")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.green)
             }
 
             HStack(spacing: 10) {
@@ -175,7 +244,8 @@ struct MenuBarView: View {
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .stroke(.green.opacity(0.2), lineWidth: 1)
+                    .stroke(.green.opacity(0.25), lineWidth: 1)
+                    .padding(-1)
             )
         }
     }
@@ -229,7 +299,7 @@ struct MenuBarView: View {
                         Spacer()
 
                         Button("Apply") {
-                            appState.apply(profile)
+                            appState.applyFromMenuBar(profile)
                         }
                         .buttonStyle(.borderedProminent)
                         .controlSize(.small)

@@ -1,7 +1,7 @@
 import Foundation
 
-struct AppAlert: Identifiable {
-    enum Kind {
+struct AppAlert: Identifiable, Equatable {
+    enum Kind: Equatable {
         case success
         case error
     }
