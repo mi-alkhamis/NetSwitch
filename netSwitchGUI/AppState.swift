@@ -4,7 +4,6 @@ import NetSwitchCore
 
 @MainActor
 final class AppState: ObservableObject {
-    static let placeholderWiFiName = "WIF-NAME"
     static let defaultService = "Wi-Fi"
 
     @Published private(set) var profiles: [Profile] = []
@@ -13,6 +12,8 @@ final class AppState: ObservableObject {
     @Published private(set) var isRefreshing = false
     @Published private(set) var isApplying = false
     @Published var alert: AppAlert?
+    @Published var menuBarAlert: AppAlert?
+    
 
     private let profileStore: ProfileStore
 
@@ -65,29 +66,46 @@ final class AppState: ObservableObject {
             }
         }
     }
+    func requestWiFiAuthorization() {
+        WiFiAuthorization.shared.requestAuthorization { [weak self] in
+            self?.refreshNetworkInfo()
+        }
+    }
+    
 
     var selectedProfile: Profile? {
         profiles.first { $0.id == selectedProfileID }
     }
 
     var wifiName: String {
-        Self.placeholderWiFiName
+        networkInfo.ssid
     }
 
     func refreshNetworkInfo() {
+        guard !isRefreshing else { return }
         isRefreshing = true
 
-        defer {
-            isRefreshing = false
-        }
+        Task {
+            do {
+                let (info, wifi) = try await Task.detached(priority: .userInitiated) {
+                    let info = try NetworkClient.info(for: Self.defaultService)
+                    let wifi = NetworkClient.wifiStatus()
+                    return (info, wifi)
+                }.value
 
-        do {
-            networkInfo = try NetworkClient.info(for: Self.defaultService)
-        } catch {
-            showError(
-                title: "Could Not Refresh Network Status",
-                error: error
-            )
+                self.networkInfo = info
+                self.wifiSignal = wifi.signalStrength
+                self.wifiEncryption = wifi.encryption
+                self.wifiChannel = wifi.channel
+                self.wifiBand = wifi.band
+                self.isRefreshing = false
+            } catch {
+                self.isRefreshing = false
+                self.showError(
+                    title: "Could Not Refresh Network Status",
+                    error: error
+                )
+            }
         }
     }
 
@@ -151,31 +169,82 @@ final class AppState: ObservableObject {
             )
         }
     }
-
-    func apply(_ profile: Profile) {
-        isApplying = true
-
-        defer {
-            isApplying = false
-        }
-
+    func delete(_ profile: Profile) {
         do {
-            try NetworkClient.apply(profile)
-            refreshNetworkInfo()
+            try profileStore.delete(name: profile.name)
+            reloadProfiles()
+            if selectedProfileID == profile.id {
+                selectedProfileID = profiles.first?.id
+            }
 
             alert = AppAlert(
                 kind: .success,
-                title: "Profile Applied",
-                message: "\"\(profile.name)\" was applied to \(profile.service)."
+                title: "Profile Deleted",
+                message: "\"\(profile.name)\" was removed."
             )
         } catch {
             showError(
-                title: "Could Not Apply Profile",
+                title: "Could Not Delete Profile",
                 error: error
             )
         }
     }
 
+    func apply(_ profile: Profile) {
+        performApply(profile) { [weak self] alert in
+            self?.alert = alert
+        }
+    }
+
+    func applyFromMenuBar(_ profile: Profile) {
+        performApply(profile) { [weak self] alert in
+            self?.menuBarAlert = alert
+        }
+    }
+
+    private func performApply(_ profile: Profile, setAlert: @escaping (AppAlert) -> Void) {
+        guard !isApplying else { return }
+        isApplying = true
+
+        Task {
+            do {
+                try await Task.detached(priority: .userInitiated) {
+                    try NetworkClient.apply(profile)
+                }.value
+
+                // configd applies changes asynchronously; give it a moment before
+                // reading state back, especially for static IP/DNS changes.
+                try? await Task.sleep(nanoseconds: 900_000_000) // 0.9s
+                self.refreshNetworkInfo()
+
+                // If we expected DNS servers but didn't see them yet, try once more
+                // after a slightly longer wait — static config can take a bit longer.
+                if !profile.dnsServers.isEmpty {
+                    try? await Task.sleep(nanoseconds: 1_200_000_000) // 1.2s
+                    if self.networkInfo.dnsServers.isEmpty {
+                        self.refreshNetworkInfo()
+                    }
+                }
+
+                self.isApplying = false
+
+                setAlert(AppAlert(
+                    kind: .success,
+                    title: "Profile Applied",
+                    message: "\"\(profile.name)\" was applied to \(profile.service)."
+                ))
+
+                activeProfile = profile
+            } catch {
+                self.isApplying = false
+                setAlert(AppAlert(
+                    kind: .error,
+                    title: "Could Not Apply Profile",
+                    message: error.localizedDescription
+                ))
+            }
+        }
+    }
     private func reloadProfiles() {
         do {
             try profileStore.load()
@@ -244,4 +313,20 @@ final class AppState: ObservableObject {
 
         return backupFileURL
     }
+
+    // WiFi status (StatusView + MenuBar)
+    @Published var wifiSignal: Int = 0
+    @Published var wifiEncryption: String = ""
+    @Published var wifiChannel: Int = 0
+    @Published var wifiBand: String = ""
+
+    // Active profile detection
+    @Published var activeProfile: Profile? = nil
+
+    // WiFi scanning (WiFiScannerView)
+    @Published var wifiNetworks: [WiFiNetwork] = []
+    @Published var isScanningWiFi: Bool = false
+
+    func scanWiFi() { /* CoreWLAN scan */ }
+    func connect(to network: WiFiNetwork, password: String, save: Bool) { /* connect logic */ }
 }

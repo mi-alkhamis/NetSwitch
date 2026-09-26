@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:netswitch-cli}",
+            "name": "Debug netswitch",
+            "target": "netswitch",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug netswitch"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:netswitch-cli}",
+            "name": "Release netswitch",
+            "target": "netswitch",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release netswitch"
+        }
+    ]
+}

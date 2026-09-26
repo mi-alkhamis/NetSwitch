@@ -6,6 +6,12 @@ func fail(_ message: String) -> Never {
     exit(1)
 }
 
+/// Runs `work`, exiting with its error message on failure.
+///
+/// `@discardableResult` because most callers use this purely for the error handling — several wrap
+/// functions that return a value the CLI has no use for, such as `NetworkClient.apply`'s read-back
+/// of the resulting `NetworkInfo`.
+@discardableResult
 func attempt<T>(_ work: () throws -> T) -> T {
     do { return try work() } catch { fail(error.localizedDescription) }
 }
@@ -80,7 +86,7 @@ func help() -> Never {
       netswitch services                 list network services
       netswitch hardware                 list hardware ports and device names
       netswitch wifi <device>            preferred Wi-Fi networks (for example, en0)
-      netswitch info <service>           current IPv4/subnet/router information
+      netswitch info <service>           current SSID/IPv4/subnet/router information
 
     Set live config (admin prompt):
       netswitch set network <service> --dhcp
@@ -110,7 +116,12 @@ case "services": attempt { try NetworkClient.services().forEach { print($0) } }
 case "hardware": attempt { print(try NetworkClient.hardwarePorts()) }
 case "wifi": attempt { print(try NetworkClient.preferredWirelessNetworks(for: arg(2, "usage: netswitch wifi <device>  (e.g. en0 — see netswitch hardware)"))) }
 case "info":
-    print(attempt { try NetworkClient.rawInfo(for: arg(2, "usage: netswitch info <service>  (e.g. Wi-Fi — see netswitch services)")) })
+    let value = attempt { try NetworkClient.info(for: arg(2, "usage: netswitch info <service>  (e.g. Wi-Fi — see netswitch services)")) }
+    print("SSID:         \(value.ssid.isEmpty ? "(not connected)" : value.ssid)")
+    print("IP address:   \(value.ipAddress)")
+    print("Subnet mask:  \(value.subnetMask)")
+    print("Router:       \(value.gateway)")
+    print("DNS servers:  \(value.dnsServers.isEmpty ? "(none)" : value.dnsServers.joined(separator: ", "))")
 case "set":
     let kind = arg(2, "usage: netswitch set <network|dns> <service> ...")
     let service = arg(3, "usage: netswitch set \(kind) <service> ...")

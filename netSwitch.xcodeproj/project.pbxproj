@@ -8,16 +8,39 @@
 
 /* Begin PBXBuildFile section */
 		C65B26CC3037793D000E0623 /* NetSwitchCore in Frameworks */ = {isa = PBXBuildFile; productRef = C65B26CB3037793D000E0623 /* NetSwitchCore */; };
-		C65B26CF30377C39000E0623 /* NetSwitchCore in Frameworks */ = {isa = PBXBuildFile; productRef = C65B26CE30377C39000E0623 /* NetSwitchCore */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		C6EEB19D302F838F0083FB67 /* netSwitch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = netSwitch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		C60EEBAB3062FCA100D61334 /* Exceptions for "netSwitchGUI" folder in "netSwitch" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				"MenuBarView~.txt",
+			);
+			target = C6EEB19C302F838F0083FB67 /* netSwitch */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
+		C60EEBAC3062FCA100D61334 /* Exceptions for "netSwitchGUI" folder in "Compile Sources" phase from "netSwitch" target */ = {
+			isa = PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet;
+			buildPhase = C6EEB199302F838F0083FB67 /* Sources */;
+			membershipExceptions = (
+				"MenuBarView~.txt",
+			);
+		};
+/* End PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		C6EEB19F302F838F0083FB67 /* netSwitchGUI */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				C60EEBAB3062FCA100D61334 /* Exceptions for "netSwitchGUI" folder in "netSwitch" target */,
+				C60EEBAC3062FCA100D61334 /* Exceptions for "netSwitchGUI" folder in "Compile Sources" phase from "netSwitch" target */,
+			);
 			path = netSwitchGUI;
 			sourceTree = "<group>";
 		};
@@ -29,7 +52,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				C65B26CC3037793D000E0623 /* NetSwitchCore in Frameworks */,
-				C65B26CF30377C39000E0623 /* NetSwitchCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -73,7 +95,6 @@
 			name = netSwitch;
 			packageProductDependencies = (
 				C65B26CB3037793D000E0623 /* NetSwitchCore */,
-				C65B26CE30377C39000E0623 /* NetSwitchCore */,
 			);
 			productName = netSwitch;
 			productReference = C6EEB19D302F838F0083FB67 /* netSwitch.app */;
@@ -269,7 +290,9 @@
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "NetSwitch uses your location to identify the name of the Wi-Fi network you're connected to.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -302,7 +325,9 @@
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "NetSwitch uses your location to identify the name of the Wi-Fi network you're connected to.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -353,10 +378,6 @@
 
 /* Begin XCSwiftPackageProductDependency section */
 		C65B26CB3037793D000E0623 /* NetSwitchCore */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = NetSwitchCore;
-		};
-		C65B26CE30377C39000E0623 /* NetSwitchCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = NetSwitchCore;
 		};
