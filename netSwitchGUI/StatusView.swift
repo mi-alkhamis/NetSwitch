@@ -6,129 +6,109 @@ struct StatusView: View {
 
     var body: some View {
         List {
-            Section("Current Wi-Fi") {
+            Section("Connection") {
                 if appState.wifiName.isEmpty {
-                    NetworkStatusLabelRow(
-                        title: "Status",
-                        value: "Not Connected"
-                    )
+                    LabeledContent("Status", value: "Not Connected")
+                        .foregroundStyle(.secondary)
                 } else {
-                    NetworkStatusLabelRow(
-                        title: "Network Name",
-                        value: appState.wifiName
-                    )
+                    LabeledContent("Network") {
+                        Text(appState.wifiName)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .textSelection(.enabled)
+                    }
 
                     if !appState.wifiEncryption.isEmpty {
-                        NetworkStatusLabelRow(
-                            title: "Security",
-                            value: appState.wifiEncryption
-                        )
+                        LabeledContent("Security", value: appState.wifiEncryption)
                     }
 
                     if !appState.wifiBand.isEmpty {
-                        NetworkStatusLabelRow(
-                            title: "Band",
-                            value: appState.wifiBand
-                        )
+                        LabeledContent("Band", value: appState.wifiBand)
                     }
 
                     if appState.wifiChannel > 0 {
-                        NetworkStatusLabelRow(
-                            title: "Channel",
-                            value: "\(appState.wifiChannel)"
-                        )
+                        LabeledContent("Channel") {
+                            Text("\(appState.wifiChannel)")
+                                .monospacedDigit()
+                                .textSelection(.enabled)
+                        }
                     }
 
                     if appState.wifiSignal != 0 {
-                        NetworkStatusLabelRow(
-                            title: "Signal Strength",
-                            value: "\(appState.wifiSignal) dBm"
-                        )
+                        LabeledContent("Signal") {
+                            Text("\(appState.wifiSignal) dBm")
+                                .monospacedDigit()
+                                .textSelection(.enabled)
+                        }
                     }
                 }
             }
 
-            Section("Network Information") {
-                NetworkStatusLabelRow(
-                    title: "Service",
-                    value: appState.networkInfo.service
-                )
+            Section("IPv4") {
+                LabeledContent("Service") {
+                    Text(appState.networkInfo.service)
+                        .textSelection(.enabled)
+                }
 
-                NetworkStatusLabelRow(
-                    title: "IP Address",
-                    value: appState.networkInfo.ipAddress
-                )
+                LabeledContent("IP Address") {
+                    Text(appState.networkInfo.ipAddress)
+                        .monospacedDigit()
+                        .textSelection(.enabled)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
 
                 if !appState.networkInfo.subnetMask.isEmpty {
-                    NetworkStatusLabelRow(
-                        title: "Subnet Mask",
-                        value: appState.networkInfo.subnetMask
-                    )
+                    LabeledContent("Subnet Mask") {
+                        Text(appState.networkInfo.subnetMask)
+                            .monospacedDigit()
+                            .textSelection(.enabled)
+                    }
                 }
 
                 if !appState.networkInfo.gateway.isEmpty {
-                    NetworkStatusLabelRow(
-                        title: "Router",
-                        value: appState.networkInfo.gateway
-                    )
+                    LabeledContent("Router") {
+                        Text(appState.networkInfo.gateway)
+                            .monospacedDigit()
+                            .textSelection(.enabled)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
                 }
             }
 
-            if !appState.networkInfo.dnsServers.isEmpty {
-                Section("DNS Servers") {
+            Section("DNS Servers") {
+                if appState.networkInfo.dnsServers.isEmpty {
+                    Text("System default")
+                        .foregroundStyle(.secondary)
+                } else {
                     ForEach(appState.networkInfo.dnsServers, id: \.self) { server in
                         DNSServerRow(server: server)
                     }
                 }
             }
-
-            Section {
-                Button {
-                    appState.refreshNetworkInfo()
-                } label: {
-                    Label("Refresh Network Status", systemImage: "arrow.clockwise")
-                    if appState.isRefreshing {
-                        ProgressView()
-                            .controlSize(.small)
-                    }
-                }
-                .disabled(appState.isRefreshing)
-            } header: {
-                Text("Actions")
-            } footer: {
-                Text("Tap refresh to get the latest network information")
-            }
         }
         .navigationTitle("Status")
         .listStyle(.inset(alternatesRowBackgrounds: true))
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    appState.refreshNetworkInfo()
+                } label: {
+                    HStack(spacing: 6) {
+                        Label("Refresh", systemImage: "arrow.clockwise")
+                        if appState.isRefreshing {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
+                    }
+                }
+                .disabled(appState.isRefreshing)
+            }
+        }
         .onAppear {
             appState.refreshNetworkInfo()
         }
-    }
-}
-
-// MARK: - Network Status Label Row
-
-private struct NetworkStatusLabelRow: View {
-    let title: String
-    let value: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text(title)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Text(value)
-                    .font(.body.weight(.medium))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
-        }
-        .padding(.vertical, 8)
-        .contentShape(Rectangle())
     }
 }
 
@@ -140,19 +120,17 @@ struct DNSServerRow: View {
     var body: some View {
         HStack {
             Image(systemName: "server.rack")
-                .foregroundStyle(.purple)
+                .foregroundStyle(.secondary)
                 .frame(width: 24)
 
             Text(server)
                 .font(.body.monospacedDigit())
-                .foregroundStyle(.primary)
+                .textSelection(.enabled)
+                .lineLimit(1)
+                .truncationMode(.middle)
 
-            Spacer()
-
-            Image(systemName: "copy")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            Spacer(minLength: 0)
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, 2)
     }
 }
