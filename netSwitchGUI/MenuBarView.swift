@@ -12,7 +12,7 @@ import Combine
 
 struct MenuBarView: View {
     @EnvironmentObject private var appState: AppState
-    @Environment(\.openSettings) private var openSettings
+    @Environment(\.openWindow) private var openWindow
     @State private var localBanner: AppAlert?
 
     var body: some View {
@@ -326,8 +326,8 @@ struct MenuBarView: View {
 
             Spacer()
 
-            Button("Open NetSwitch...") {
-                openSettings()
+            Button("Open NetSwitch") {
+                openWindow(id: "management")
             }
             .buttonStyle(.borderless)
         }

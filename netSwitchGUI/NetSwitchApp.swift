@@ -5,7 +5,7 @@ struct NetSwitchApp: App {
     @StateObject private var appState = AppState()
 
     var body: some Scene {
-        WindowGroup("NetSwitch") {
+        WindowGroup("NetSwitch", id: "management") {
             PreferencesView()
                 .environmentObject(appState)
         }
@@ -15,10 +15,5 @@ struct NetSwitchApp: App {
                 .environmentObject(appState)
         }
         .menuBarExtraStyle(.window)
-
-        Settings {
-            PreferencesView()
-                .environmentObject(appState)
-        }
     }
 }
