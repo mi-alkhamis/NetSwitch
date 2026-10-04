@@ -7,108 +7,106 @@ struct ProfileDetailView: View {
     let profile: Profile
 
     @State private var showingEditor = false
-    @State private var showingDeleteConfirmation = false
     @State private var showingPreview = false
+    @State private var showingDeleteConfirmation = false
 
     private var isActive: Bool {
         appState.activeProfile?.id == profile.id
     }
 
     var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    HStack {
-                        Image(systemName: profile.useDHCP ? "checkmark.seal.fill" : "network.badge.shield.half.filled")
-                            .font(.title2)
-                            .foregroundStyle(profile.useDHCP ? .green : .blue)
-                            .frame(width: 40)
+        List {
+            Section {
+                HStack {
+                    Image(systemName: profile.useDHCP ? "checkmark.seal.fill" : "network.badge.shield.half.filled")
+                        .font(.title2)
+                        .foregroundStyle(profile.useDHCP ? .green : .blue)
+                        .frame(width: 40)
 
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(profile.name)
-                                .font(.headline)
-                                .textSelection(.enabled)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(profile.name)
+                            .font(.headline)
+                            .textSelection(.enabled)
 
-                            Text(profile.useDHCP ? "DHCP (Automatic IP)" : "Static IP Configuration")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        Spacer()
-
-                        if appState.activeProfile?.id == profile.id {
-                            ChipLabel(text: "Current", systemImage: "checkmark.circle.fill", tint: .green, bold: true)
-                        }
+                        Text(profile.useDHCP ? "DHCP (Automatic IP)" : "Static IP Configuration")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
-                }
 
-                if profile.useDHCP {
-                    Section {
-                        EmptyNetworkConfigRow(systemImage: "arrow.triangle.2.circlepath", desc: "IP address is assigned automatically by your router")
-                    } header: {
-                        Text("IP Configuration")
-                    }
-                } else {
-                    Section {
-                        IPConfigRow(title: "IP Address", value: profile.ipAddress)
-                        IPConfigRow(title: "Subnet Mask", value: profile.subnetMask)
-                        IPConfigRow(title: "Router / Gateway", value: profile.gateway)
-                    } header: {
-                        Text("Static IP Configuration")
-                    }
-                }
+                    Spacer()
 
-                Section(header: Text("DNS Configuration")) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("DNS Servers")
-                                .font(.caption2.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            Text(profile.dnsServers.isEmpty ? "System default" : "\(profile.dnsServers.count)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        if profile.dnsServers.isEmpty {
-                            Text("No custom DNS servers configured — using system default resolvers.")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        } else {
-                            ForEach(profile.dnsServers, id: \.self) { server in
-                                DNSServerRow(server: server)
-                            }
-                        }
-                    }
-                }
-
-                if profile.dnsServers.isEmpty {
-                    Section {
-                        EmptyNetworkConfigRow(systemImage: "server.rack", desc: "DNS servers are using default system configuration")
-                    } header: {
-                        Text("DNS Servers")
+                    if appState.activeProfile?.id == profile.id {
+                        ChipLabel(text: "Current", systemImage: "checkmark.circle.fill", tint: .green, bold: true)
                     }
                 }
             }
-            .navigationTitle(profile.name)
-            .toolbar {
-                ToolbarItem {
-                    Button {
-                        showingEditor = true
-                    } label: {
-                        Label("Edit", systemImage: "pencil")
-                    }
-                }
 
-                ToolbarItem(placement: .primaryAction) {
-                    Button("Apply") {
-                        if appState.activeProfile?.id != profile.id {
-                            appState.apply(profile)
+            if profile.useDHCP {
+                Section {
+                    EmptyNetworkConfigRow(systemImage: "arrow.triangle.2.circlepath", desc: "IP address is assigned automatically by your router")
+                } header: {
+                    Text("IP Configuration")
+                }
+            } else {
+                Section {
+                    IPConfigRow(title: "IP Address", value: profile.ipAddress)
+                    IPConfigRow(title: "Subnet Mask", value: profile.subnetMask)
+                    IPConfigRow(title: "Router / Gateway", value: profile.gateway)
+                } header: {
+                    Text("Static IP Configuration")
+                }
+            }
+
+            Section(header: Text("DNS Configuration")) {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("DNS Servers")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text(profile.dnsServers.isEmpty ? "System default" : "\(profile.dnsServers.count)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    if profile.dnsServers.isEmpty {
+                        Text("No custom DNS servers configured — using system default resolvers.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    } else {
+                        ForEach(profile.dnsServers, id: \.self) { server in
+                            DNSServerRow(server: server)
                         }
                     }
-                    .disabled(appState.activeProfile?.id == profile.id)
                 }
+            }
+
+            if profile.dnsServers.isEmpty {
+                Section {
+                    EmptyNetworkConfigRow(systemImage: "server.rack", desc: "DNS servers are using default system configuration")
+                } header: {
+                    Text("DNS Servers")
+                }
+            }
+        }
+        .navigationTitle(profile.name)
+        .toolbar {
+            ToolbarItem {
+                Button {
+                    showingEditor = true
+                } label: {
+                    Label("Edit", systemImage: "pencil")
+                }
+            }
+
+            ToolbarItem(placement: .primaryAction) {
+                Button("Apply") {
+                    if appState.activeProfile?.id != profile.id {
+                        appState.apply(profile)
+                    }
+                }
+                .disabled(appState.activeProfile?.id == profile.id)
             }
         }
         .sheet(isPresented: $showingEditor) {

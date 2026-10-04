@@ -1,17 +1,16 @@
 import SwiftUI
 import NetSwitchCore
 
-struct PreferencesView: View {
-    // Fixed placeholder IDs for the two non-profile sidebar rows.
-    // These never change and are not tied to any real data, so there's
-    // nothing for the system to reconstruct incorrectly on relaunch.
-    private static let statusID = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
-    private static let wifiID = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
-    
+private enum SidebarDestination: Hashable {
+    case status
+    case wifi
+    case profile(UUID)
+}
 
+struct PreferencesView: View {
     @EnvironmentObject private var appState: AppState
 
-    @State private var selection: UUID? = PreferencesView.statusID
+    @State private var selection: SidebarDestination? = .status
     @State private var showingNewProfileEditor = false
     @State private var searchText = ""
     @State private var localBanner: AppAlert?
@@ -31,16 +30,15 @@ struct PreferencesView: View {
         } detail: {
             detailView
         }
-        .frame(minWidth: 760, minHeight: 480)
+        .frame(minWidth: 900, minHeight: 600)
         .onAppear {
             appState.requestWiFiAuthorization()
         }
-        .frame(minWidth: 900, minHeight: 600)
         .sheet(isPresented: $showingNewProfileEditor) {
             NavigationStack {
                 ProfileEditorView(profile: nil) { newProfile in
                     appState.addProfile(newProfile)
-                    selection = newProfile.id
+                    selection = .profile(newProfile.id)
                 }
             }
         }
@@ -79,16 +77,16 @@ struct PreferencesView: View {
         List(selection: $selection) {
             Section("Overview") {
                 Label("Status", systemImage: "chart.bar.fill")
-                    .tag(Self.statusID)
+                    .tag(SidebarDestination.status)
 
                 Label("Wi-Fi Networks", systemImage: "wifi")
-                    .tag(Self.wifiID)
+                    .tag(SidebarDestination.wifi)
             }
 
             Section {
                 ForEach(filteredProfiles) { profile in
                     profileSidebarRow(profile)
-                        .tag(profile.id)
+                        .tag(SidebarDestination.profile(profile.id))
                 }
             } header: {
                 HStack {
@@ -148,19 +146,20 @@ struct PreferencesView: View {
 
     @ViewBuilder
     private var detailView: some View {
-        if selection == Self.wifiID {
+        switch selection {
+        case .wifi:
             WiFiScannerView()
-        } else if let id = selection, let profile = appState.profiles.first(where: { $0.id == id }) {
-            ProfileDetailView(profile: profile)
-        } else if let id = selection, id != Self.statusID {
-            // Selection points at a profile that no longer exists
-            // (e.g. it was deleted, or restored from a previous session).
-            ContentUnavailableView(
-                "Profile Not Found",
-                systemImage: "exclamationmark.triangle",
-                description: Text("Choose another profile from the sidebar.")
-            )
-        } else {
+        case let .profile(id):
+            if let profile = appState.profiles.first(where: { $0.id == id }) {
+                ProfileDetailView(profile: profile)
+            } else {
+                ContentUnavailableView(
+                    "Profile Not Found",
+                    systemImage: "exclamationmark.triangle",
+                    description: Text("Choose another profile from the sidebar.")
+                )
+            }
+        case .status, nil:
             StatusView()
         }
     }
