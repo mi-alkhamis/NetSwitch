@@ -9,13 +9,12 @@ struct StatusView: View {
             Section("Connection") {
                 if appState.wifiName.isEmpty {
                     LabeledContent("Status", value: "Not Connected")
-                        .foregroundStyle(.secondary)
                 } else {
-                    LabeledContent("Network") {
+                    LabeledContent("Network Name") {
                         Text(appState.wifiName)
+                            .textSelection(.enabled)
                             .lineLimit(1)
                             .truncationMode(.middle)
-                            .textSelection(.enabled)
                     }
 
                     if !appState.wifiEncryption.isEmpty {
@@ -35,7 +34,7 @@ struct StatusView: View {
                     }
 
                     if appState.wifiSignal != 0 {
-                        LabeledContent("Signal") {
+                        LabeledContent("Signal Strength") {
                             Text("\(appState.wifiSignal) dBm")
                                 .monospacedDigit()
                                 .textSelection(.enabled)
@@ -48,6 +47,8 @@ struct StatusView: View {
                 LabeledContent("Service") {
                     Text(appState.networkInfo.service)
                         .textSelection(.enabled)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                 }
 
                 LabeledContent("IP Address") {
@@ -63,6 +64,8 @@ struct StatusView: View {
                         Text(appState.networkInfo.subnetMask)
                             .monospacedDigit()
                             .textSelection(.enabled)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
                     }
                 }
 
@@ -77,11 +80,8 @@ struct StatusView: View {
                 }
             }
 
-            Section("DNS Servers") {
-                if appState.networkInfo.dnsServers.isEmpty {
-                    Text("System default")
-                        .foregroundStyle(.secondary)
-                } else {
+            if !appState.networkInfo.dnsServers.isEmpty {
+                Section("DNS Servers") {
                     ForEach(appState.networkInfo.dnsServers, id: \.self) { server in
                         DNSServerRow(server: server)
                     }
@@ -91,7 +91,7 @@ struct StatusView: View {
         .navigationTitle("Status")
         .listStyle(.inset(alternatesRowBackgrounds: true))
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
+            ToolbarItem {
                 Button {
                     appState.refreshNetworkInfo()
                 } label: {
@@ -120,7 +120,7 @@ struct DNSServerRow: View {
     var body: some View {
         HStack {
             Image(systemName: "server.rack")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.purple)
                 .frame(width: 24)
 
             Text(server)
@@ -131,6 +131,6 @@ struct DNSServerRow: View {
 
             Spacer(minLength: 0)
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 8)
     }
 }
