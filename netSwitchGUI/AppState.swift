@@ -234,7 +234,7 @@ final class AppState: ObservableObject {
                     message: "\"\(profile.name)\" was applied to \(profile.service)."
                 ))
 
-                activeProfile = profile
+                lastAppliedProfile = profile
             } catch {
                 self.isApplying = false
                 setAlert(AppAlert(
@@ -320,8 +320,8 @@ final class AppState: ObservableObject {
     @Published var wifiChannel: Int = 0
     @Published var wifiBand: String = ""
 
-    // Active profile detection
-    @Published var activeProfile: Profile? = nil
+    // Last applied profile (in-memory marker set on successful apply)
+    @Published var lastAppliedProfile: Profile? = nil
 
     // WiFi scanning (WiFiScannerView)
     @Published var wifiNetworks: [WiFiNetwork] = []

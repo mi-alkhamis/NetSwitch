@@ -112,15 +112,15 @@ struct PreferencesView: View {
     }
 
     private func profileSidebarRow(_ profile: Profile) -> some View {
-        let isActive = appState.activeProfile?.id == profile.id
+        let isLastApplied = appState.lastAppliedProfile?.id == profile.id
 
         return Label {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
                     Text(profile.name)
-                        .font(.system(size: 13, weight: isActive ? .semibold : .regular))
+                        .font(.system(size: 13, weight: isLastApplied ? .semibold : .regular))
 
-                    if isActive {
+                    if isLastApplied {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.caption2)
                             .foregroundStyle(.green)
@@ -138,7 +138,7 @@ struct PreferencesView: View {
                     ? "arrow.triangle.2.circlepath.circle.fill"
                     : "network.badge.shield.half.filled"
             )
-            .foregroundStyle(isActive ? .green : (profile.useDHCP ? .blue : .orange))
+            .foregroundStyle(isLastApplied ? .green : (profile.useDHCP ? .blue : .orange))
         }
     }
 

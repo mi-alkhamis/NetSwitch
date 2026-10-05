@@ -33,10 +33,10 @@ struct MenuBarView: View {
             // MARK: - Network Details
             networkSection
 
-            // MARK: - Active/Other Profiles
-            if let active = appState.activeProfile {
+            // MARK: - Last Applied / Other Profiles
+            if let lastApplied = appState.lastAppliedProfile {
                 Divider().padding(.vertical, 4)
-                activeProfileSection(active)
+                lastAppliedProfileSection(lastApplied)
             }
 
             if !appState.profiles.isEmpty {
@@ -193,16 +193,16 @@ struct MenuBarView: View {
         .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
-    // MARK: - Active Profile
+    // MARK: - Last Applied Profile
 
-    private func activeProfileSection(_ profile: Profile) -> some View {
+    private func lastAppliedProfileSection(_ profile: Profile) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.caption2)
                     .foregroundStyle(.green)
 
-                Text("Active Profile")
+                Text("Last Applied Profile")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .textCase(.uppercase)
@@ -254,8 +254,8 @@ struct MenuBarView: View {
 
     private var otherProfilesSection: some View {
         VStack(alignment: .leading, spacing: 6) {
-            if appState.profiles.count > 1 || appState.activeProfile == nil {
-                Text(appState.activeProfile == nil ? "Profiles" : "Other Profiles")
+            if appState.profiles.count > 1 || appState.lastAppliedProfile == nil {
+                Text(appState.lastAppliedProfile == nil ? "Profiles" : "Other Profiles")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .textCase(.uppercase)
@@ -270,7 +270,7 @@ struct MenuBarView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 8)
             } else {
-                let others = appState.profiles.filter { $0.id != appState.activeProfile?.id }
+                let others = appState.profiles.filter { $0.id != appState.lastAppliedProfile?.id }
 
                 ForEach(others) { profile in
                     HStack(spacing: 10) {
