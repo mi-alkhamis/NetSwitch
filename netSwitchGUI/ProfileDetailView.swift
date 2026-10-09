@@ -1,6 +1,7 @@
 import SwiftUI
 import NetSwitchCore
 
+
 struct ProfileDetailView: View {
     @EnvironmentObject private var appState: AppState
 

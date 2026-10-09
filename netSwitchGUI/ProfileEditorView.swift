@@ -1,5 +1,7 @@
 import SwiftUI
 import NetSwitchCore
+import UniformTypeIdentifiers
+import AppKit
 
 struct ProfileEditorView: View {
     @Environment(\.dismiss) private var dismiss
@@ -24,6 +26,10 @@ struct ProfileEditorView: View {
     @State private var gateway = ""
     @State private var dnsServers: [DNSEntry] = []
     @State private var showAdvanced = false
+    @State private var draggingDNSID: UUID? = nil
+
+    private enum Field: Hashable { case name }
+    @FocusState private var focusedField: Field?
 
     private var isEditing: Bool {
         profile != nil
@@ -47,8 +53,23 @@ struct ProfileEditorView: View {
         Form {
             // MARK: Profile Name
             Section {
-                TextField("Profile Name", text: $name)
-                    .font(.body)
+                HStack(alignment: .center, spacing: 1) {
+                    Text("Profile Name")
+                        .font(.subheadline.weight(.medium))
+                        .frame(width: 110, alignment: .leading)
+
+                    LTRTextField(text: $name, placeholder: "Profile Name")
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .frame(minWidth: 260, maxWidth: .infinity, alignment: .leading)
+                        .layoutPriority(1)
+                        .background(Color(nsColor: .textBackgroundColor))
+                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
+                        )
+                }
             } header: {
                 Label("Profile", systemImage: "person.crop.circle.badge.checkmark")
                     .font(.subheadline.weight(.semibold))
@@ -87,7 +108,7 @@ struct ProfileEditorView: View {
                     IPFieldRow(
                         title: "IP Address",
                         text: $ipAddress,
-                        placeholder: "10.0.1.50"
+                        placeholder: "192.168.100.40"
                     )
                     IPFieldRow(
                         title: "Subnet Mask",
@@ -97,7 +118,7 @@ struct ProfileEditorView: View {
                     IPFieldRow(
                         title: "Gateway",
                         text: $gateway,
-                        placeholder: "10.0.1.1"
+                        placeholder: "192.168.100.1"
                     )
                 } header: {
                     Label("Static IP", systemImage: "network")
@@ -112,10 +133,11 @@ struct ProfileEditorView: View {
             // MARK: DNS Servers (reorderable)
             Section {
                 VStack(spacing: 6) {
-                    ForEach(Array(dnsServers.enumerated()), id: \.element.id) { position, entry in
-                        dnsRow(id: entry.id, position: position)
+                    ForEach(dnsServers, id: \.id) { entry in
+                        dnsRow(id: entry.id)
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
 
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) {
@@ -142,7 +164,7 @@ struct ProfileEditorView: View {
             Section {
                 DisclosureGroup(isExpanded: $showAdvanced) {
                     HStack {
-                        Image(systemName: "wifi")
+                        Image(systemName: "Wi-Fi")
                             .foregroundStyle(.secondary)
                             .font(.caption)
                         Text("Network Service")
@@ -160,7 +182,7 @@ struct ProfileEditorView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 500)
+        .frame(minWidth: 460, minHeight: 400)
         .animation(.easeInOut(duration: 0.25), value: useDHCP)
         .animation(.easeInOut(duration: 0.2), value: showAdvanced)
         .navigationTitle(isEditing ? "Edit Profile" : "New Profile")
@@ -186,72 +208,152 @@ struct ProfileEditorView: View {
         }
         .onAppear {
             loadProfile()
+            if profile == nil { focusedField = .name }
         }
     }
 
     // MARK: - DNS Rows
 
-    private func dnsRow(id: UUID, position: Int) -> some View {
-        let value = dnsServers.first { $0.id == id }?.value ?? ""
+    private struct DNSRowContent: View {
+        let id: UUID
+        @Binding var value: String
+        let ordinalPlaceholder: String
+        let isValid: Bool
+        @Binding var dnsServers: [DNSEntry]
+        @Binding var draggingDNSID: UUID?
 
-        return HStack(spacing: 10) {
-            // Explicit arrows rather than a drag handle: `.onMove` only fires inside a `List`, so
-            // the handle this replaces never did anything.
-            VStack(spacing: 1) {
-                Button {
-                    move(id: id, by: -1)
-                } label: {
-                    Image(systemName: "chevron.up")
+        @State private var showSuccessFlash = false
+
+        var body: some View {
+            HStack(spacing: 6) {
+                // Left: ordinal label
+                Text(ordinalPlaceholder)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 90, alignment: .leading)
+
+                // Drag handle icon
+                Image(systemName: "line.3.horizontal")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 16)
+                    .accessibilityLabel("Reorder DNS")
+
+                // Text field with placeholder and validation background
+                ZStack(alignment: .leading) {
+                    if value.isEmpty {
+                        Text("DNS Server")
+                            .font(.system(.body, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 10)
+                    }
+
+                    LTRTextField(text: $value, placeholder: "")
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
                 }
-                .disabled(position == 0)
-                .help("Move up")
+                .background(
+                    showSuccessFlash
+                        ? Color.green.opacity(0.15)
+                        : (
+                            value.isEmpty
+                                ? Color(nsColor: .textBackgroundColor)
+                                : (isValid ? Color(nsColor: .textBackgroundColor) : Color.red.opacity(0.15))
+                        )
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .stroke(
+                            value.isEmpty
+                                ? Color(nsColor: .separatorColor)
+                                : (isValid ? Color(nsColor: .separatorColor) : Color.red.opacity(0.5)),
+                            lineWidth: 1
+                        )
+                )
+
+                if !value.isEmpty && !isValid {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                        .font(.caption)
+                        .help("Invalid IP address")
+                }
+
+                Spacer(minLength: 8)
 
                 Button {
-                    move(id: id, by: 1)
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        dnsServers.removeAll { $0.id == id }
+                    }
                 } label: {
-                    Image(systemName: "chevron.down")
+                    Image(systemName: "minus.circle.fill")
+                        .foregroundStyle(.red.opacity(0.85))
+                        .imageScale(.medium)
                 }
-                .disabled(position == dnsServers.count - 1)
-                .help("Move down")
+                .buttonStyle(.plain)
+                .help("Remove DNS server")
             }
-            .buttonStyle(.plain)
-            .font(.caption2.weight(.bold))
-            .foregroundStyle(.secondary)
-
-            Image(systemName: "server.rack")
-                .font(.caption)
-                .foregroundStyle(.purple)
-                .frame(width: 16)
-
-            TextField("DNS Server", text: binding(for: id))
-                .font(.system(.body, design: .monospaced))
-                .textFieldStyle(.plain)
-
-            if !value.isEmpty && !validIP(value) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
-                    .font(.caption)
-                    .help("Invalid IP address")
-            } else if !value.isEmpty {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
-                    .font(.caption)
+            .onDrag {
+                draggingDNSID = id
+                return NSItemProvider(object: id.uuidString as NSString)
             }
-
-            Button {
-                removeDNSServer(id: id)
-            } label: {
-                Image(systemName: "minus.circle.fill")
-                    .foregroundStyle(.red.opacity(0.85))
-                    .imageScale(.medium)
+            .onDrop(of: [.text], delegate: DNSReorderDropDelegate(
+                current: id,
+                items: $dnsServers,
+                dragging: $draggingDNSID
+            ))
+            .padding(.vertical, 4)
+            .padding(.horizontal, 8)
+            .background(Color(nsColor: .controlBackgroundColor))
+            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .onChange(of: value) { oldValue, newValue in
+                let wasValid = oldValue.isEmpty || validIP(oldValue)
+                let isNowValid = newValue.isEmpty || validIP(newValue)
+                if !wasValid && isNowValid && !newValue.isEmpty {
+                    showSuccessFlash = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                        if validIP(value) { showSuccessFlash = false } else { showSuccessFlash = false }
+                    }
+                } else if !isNowValid {
+                    showSuccessFlash = false
+                }
             }
-            .buttonStyle(.plain)
-            .help("Remove DNS server")
         }
-        .padding(.vertical, 4)
-        .padding(.horizontal, 8)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+    }
+
+    private func dnsRow(id: UUID) -> some View {
+        let value = dnsServers.first { $0.id == id }?.value ?? ""
+        let ordinalPlaceholder: String = {
+            if let idx = dnsServers.firstIndex(where: { $0.id == id }) {
+                switch idx {
+                case 0: return "Primary"
+                case 1: return "Secondary"
+                case 2: return "Tertiary"
+                case 3: return "Quaternary"
+                default: return "DNS \(idx + 1)"
+                }
+            }
+            return "DNS"
+        }()
+
+        let dnsIsValid = value.isEmpty || validIP(value)
+
+        return DNSRowContent(
+            id: id,
+            value: binding(for: id),
+            ordinalPlaceholder: ordinalPlaceholder,
+            isValid: dnsIsValid,
+            dnsServers: $dnsServers,
+            draggingDNSID: $draggingDNSID
+        )
+    }
+
+    private func positionLabel(for position: Int) -> String {
+        switch position {
+        case 0: "Primary"
+        case 1: "Secondary"
+        default: "\(position + 1)"
+        }
     }
 
     /// Looks the row up by id on every access, so a stale index can never be used to subscript.
@@ -303,13 +405,30 @@ struct ProfileEditorView: View {
         }
     }
 
-    private func move(id: UUID, by offset: Int) {
-        guard let index = dnsServers.firstIndex(where: { $0.id == id }) else { return }
-        let target = index + offset
-        guard dnsServers.indices.contains(target) else { return }
+    // MARK: - Drag & Drop Reordering for DNS
+    private struct DNSReorderDropDelegate: DropDelegate {
+        let current: UUID
+        @Binding var items: [DNSEntry]
+        @Binding var dragging: UUID?
 
-        withAnimation(.easeInOut(duration: 0.2)) {
-            dnsServers.swapAt(index, target)
+        func dropEntered(info: DropInfo) {
+            guard let dragging, dragging != current,
+                  let fromIndex = items.firstIndex(where: { $0.id == dragging }),
+                  let toIndex = items.firstIndex(where: { $0.id == current })
+            else { return }
+
+            if items.indices.contains(fromIndex) && items.indices.contains(toIndex) {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    let item = items.remove(at: fromIndex)
+                    items.insert(item, at: toIndex)
+                }
+                self.dragging = current
+            }
+        }
+
+        func performDrop(info: DropInfo) -> Bool {
+            dragging = nil
+            return true
         }
     }
 }
@@ -321,38 +440,119 @@ private struct IPFieldRow: View {
     @Binding var text: String
     let placeholder: String
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text(title)
-                    .font(.subheadline.weight(.medium))
-                Spacer()
-                if !text.isEmpty {
-                    Image(systemName: validIP(text) ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                        .foregroundStyle(validIP(text) ? .green : .orange)
-                        .font(.caption)
-                        .transition(.opacity)
-                }
-            }
+    @State private var touched = false
+    @State private var showSuccessFlash = false
 
-            TextField(placeholder, text: $text)
-                .font(.system(.body, design: .monospaced))
-                .textFieldStyle(.plain)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 7)
-                .background(Color(nsColor: .textBackgroundColor))
-                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .stroke(
-                            text.isEmpty
-                                ? Color(nsColor: .separatorColor)
-                                : (validIP(text) ? Color.green.opacity(0.4) : Color.orange.opacity(0.5)),
-                            lineWidth: 1
-                        )
-                )
+    var body: some View {
+        HStack(spacing: 10) {
+            Text(title)
+                .font(.subheadline.weight(.medium))
+                .frame(width: 110, alignment: .leading)
+
+            ZStack(alignment: .leading) {
+                if text.isEmpty {
+                    Text(placeholder)
+                        .font(.system(.body, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 10)
+                }
+
+                LTRTextField(text: $text, placeholder: "")
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+            }
+            .background(
+                showSuccessFlash
+                    ? Color.green.opacity(0.15)
+                    : (
+                        text.isEmpty
+                            ? Color(nsColor: .textBackgroundColor)
+                            : (validIP(text) ? Color(nsColor: .textBackgroundColor) : Color.red.opacity(0.15))
+                    )
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .stroke(
+                        text.isEmpty
+                            ? Color(nsColor: .separatorColor)
+                            : (validIP(text) ? Color(nsColor: .separatorColor) : Color.orange.opacity(0.5)),
+                        lineWidth: 1
+                    )
+            )
+
+            if touched, !text.isEmpty, !validIP(text) {
+                Text("Enter a valid IPv4 address.")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+        }
+        .onChange(of: text) { oldValue, newValue in
+            let wasValid = validIP(oldValue)
+            let isNowValid = validIP(newValue)
+            if !wasValid && isNowValid {
+                showSuccessFlash = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    // Only clear if still valid to avoid flicker when user keeps editing
+                    if validIP(text) {
+                        showSuccessFlash = false
+                    } else {
+                        showSuccessFlash = false
+                    }
+                }
+            } else if !isNowValid {
+                // Ensure we don't show success when invalid
+                showSuccessFlash = false
+            }
         }
         .padding(.vertical, 4)
         .animation(.easeInOut(duration: 0.15), value: text)
     }
 }
+
+// MARK: - Left-to-Right, Left-Aligned Text Field (macOS)
+
+private struct LTRTextField: NSViewRepresentable {
+    @Binding var text: String
+    var placeholder: String
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    func makeNSView(context: Context) -> NSTextField {
+        let field = NSTextField()
+        field.isBezeled = false
+        field.isBordered = false
+        field.drawsBackground = false
+        field.usesSingleLineMode = true
+        field.lineBreakMode = .byClipping
+        field.focusRingType = .none
+        field.font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+        field.alignment = .left
+        field.baseWritingDirection = .leftToRight
+        field.placeholderString = placeholder
+        field.delegate = context.coordinator
+        return field
+    }
+
+    func updateNSView(_ nsView: NSTextField, context: Context) {
+        if nsView.stringValue != text {
+            nsView.stringValue = text
+        }
+        nsView.placeholderString = placeholder
+        nsView.alignment = .left
+        nsView.baseWritingDirection = .leftToRight
+    }
+
+    final class Coordinator: NSObject, NSTextFieldDelegate {
+        var parent: LTRTextField
+        init(_ parent: LTRTextField) { self.parent = parent }
+
+        func controlTextDidChange(_ obj: Notification) {
+            guard let field = obj.object as? NSTextField else { return }
+            parent.text = field.stringValue
+        }
+    }
+}
+
