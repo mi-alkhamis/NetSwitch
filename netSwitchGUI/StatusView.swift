@@ -23,9 +23,6 @@ struct StatusView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 pageHeader
-                Text("Status")
-                    .font(.system(size: 26, weight: .bold))
-                    .padding(.bottom, -11)
                 connectionCard
                 ipv4Section
                 dnsSection
@@ -45,7 +42,9 @@ struct StatusView: View {
     }
 
     private var pageHeader: some View {
-        HStack {
+        HStack(alignment: .center) {
+            Text("Status")
+                .font(.system(size: 26, weight: .bold))
             Spacer()
             Button { appState.refreshNetworkInfo() } label: {
                 Image(systemName: "arrow.clockwise")
@@ -164,7 +163,7 @@ struct StatusView: View {
     private var lastUpdatedText: String {
         guard let lastUpdated else { return "Unknown" }
         let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd HH:mm"
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
         return formatter.string(from: lastUpdated)
     }
 

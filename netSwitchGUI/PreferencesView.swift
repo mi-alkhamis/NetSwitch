@@ -4,6 +4,8 @@ import NetSwitchCore
 private enum SidebarDestination: Hashable {
     case status
     case wifi
+    case speedTest
+    case dnsBenchmark
     case profile(UUID)
 }
 
@@ -74,72 +76,185 @@ struct PreferencesView: View {
     // MARK: - Sidebar
 
     private var sidebar: some View {
-        List(selection: $selection) {
-            Section("Overview") {
-                Label("Status", systemImage: "chart.bar.fill")
-                    .tag(SidebarDestination.status)
+        VStack(alignment: .leading, spacing: 24) {
+            searchField
 
-                Label("Wi-Fi Networks", systemImage: "wifi")
-                    .tag(SidebarDestination.wifi)
+            VStack(alignment: .leading, spacing: 8) {
+                sidebarSectionTitle("OVERVIEW")
+                sidebarNavigationRow(
+                    "Status",
+                    systemImage: "chart.bar.fill",
+                    destination: .status
+                )
+                sidebarNavigationRow(
+                    "Wi-Fi Networks",
+                    systemImage: "wifi",
+                    destination: .wifi
+                )
             }
 
-            Section {
-                ForEach(filteredProfiles) { profile in
-                    profileSidebarRow(profile)
-                        .tag(SidebarDestination.profile(profile.id))
-                }
-            } header: {
-                HStack {
-                    Text("Profiles")
-                    Spacer()
-                    Text("\(appState.profiles.count)")
-                        .font(.caption)
+            VStack(alignment: .leading, spacing: 8) {
+                sidebarSectionTitle("TOOLS")
+                sidebarNavigationRow(
+                    "Speed Test",
+                    systemImage: "speedometer",
+                    destination: .speedTest
+                )
+                sidebarNavigationRow(
+                    "DNS Benchmark",
+                    systemImage: "server.rack",
+                    destination: .dnsBenchmark
+                )
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Text("PROFILES")
+                        .font(.system(size: 13, weight: .bold))
+                        .tracking(0.35)
                         .foregroundStyle(.secondary)
+                    Spacer()
+                    Button {
+                        showingNewProfileEditor = true
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 12, weight: .semibold))
+                            .frame(width: 22, height: 22)
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .help("New Profile")
+                    Text("\(appState.profiles.count)")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+                .padding(.horizontal, 4)
+
+                if filteredProfiles.isEmpty {
+                    Text(searchText.isEmpty ? "No profiles" : "No matching profiles")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                } else {
+                    ForEach(filteredProfiles) { profile in
+                        profileSidebarRow(profile)
+                    }
                 }
             }
+
+            Spacer(minLength: 0)
         }
+        .padding(.horizontal, 16)
+        .padding(.top, 18)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(Color(red: 0.925, green: 0.937, blue: 0.953))
         .navigationTitle("NetSwitch")
-        .searchable(text: $searchText, placement: .sidebar, prompt: "Search profiles")
-        .toolbar {
-            ToolbarItem {
-                Button {
-                    showingNewProfileEditor = true
-                } label: {
-                    Label("New Profile", systemImage: "plus")
+        .navigationSplitViewColumnWidth(min: 250, ideal: 300, max: 350)
+    }
+
+    private var searchField: some View {
+        HStack(spacing: 9) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(Color.secondary)
+            TextField("Search profiles", text: $searchText)
+                .textFieldStyle(.plain)
+                .font(.system(size: 15))
+                .accessibilityLabel("Search profiles")
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 38)
+        .background(Color.primary.opacity(0.055), in: Capsule())
+    }
+
+    private func sidebarSectionTitle(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 13, weight: .bold))
+            .tracking(0.35)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 4)
+    }
+
+    private func sidebarNavigationRow(
+        _ title: String,
+        systemImage: String,
+        destination: SidebarDestination
+    ) -> some View {
+        let isSelected = selection == destination
+
+        return Button {
+            selection = destination
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(Color.accentColor)
+                    .frame(width: 28)
+                Text(title)
+                    .font(.system(size: 16, weight: isSelected ? .semibold : .medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 44)
+            .background {
+                if isSelected {
+                    RoundedRectangle(cornerRadius: 9)
+                        .fill(Color.accentColor.opacity(0.2))
                 }
             }
+            .contentShape(RoundedRectangle(cornerRadius: 9))
         }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     private func profileSidebarRow(_ profile: Profile) -> some View {
-        let isLastApplied = appState.lastAppliedProfile?.id == profile.id
+        let destination = SidebarDestination.profile(profile.id)
+        let isSelected = selection == destination
+        let subtitle = profile.useDHCP ? "DHCP" : "\(profile.ipAddress)  •  Static"
 
-        return Label {
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 4) {
-                    Text(profile.name)
-                        .font(.system(size: 13, weight: isLastApplied ? .semibold : .regular))
-
-                    if isLastApplied {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.caption2)
-                            .foregroundStyle(.green)
-                    }
-                }
-
-                Text(profile.useDHCP ? "DHCP" : "\(profile.ipAddress) • Static")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-        } icon: {
-            Image(
-                systemName: profile.useDHCP
+        return Button {
+            selection = destination
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: profile.useDHCP
                     ? "arrow.triangle.2.circlepath.circle.fill"
-                    : "network.badge.shield.half.filled"
-            )
-            .foregroundStyle(isLastApplied ? .green : (profile.useDHCP ? .blue : .orange))
+                    : "wifi")
+                    .font(.system(size: 21, weight: .semibold))
+                    .foregroundStyle(Color.accentColor)
+                    .frame(width: 28)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(profile.name)
+                        .font(.system(size: 16, weight: isSelected ? .semibold : .regular))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    Text(subtitle)
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                if isSelected {
+                    RoundedRectangle(cornerRadius: 9)
+                        .fill(Color.accentColor.opacity(0.2))
+                }
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 9))
         }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     // MARK: - Detail
@@ -149,6 +264,10 @@ struct PreferencesView: View {
         switch selection {
         case .wifi:
             WiFiScannerView()
+        case .speedTest:
+            SpeedTestView()
+        case .dnsBenchmark:
+            DNSBenchmarkView()
         case let .profile(id):
             if let profile = appState.profiles.first(where: { $0.id == id }) {
                 ProfileDetailView(profile: profile)

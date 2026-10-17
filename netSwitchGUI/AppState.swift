@@ -9,6 +9,7 @@ final class AppState: ObservableObject {
     @Published private(set) var profiles: [Profile] = []
     @Published var selectedProfileID: UUID?
     @Published private(set) var networkInfo = NetworkInfo(service: defaultService)
+    @Published private(set) var networkServices: [String] = [defaultService]
     @Published private(set) var isRefreshing = false
     @Published private(set) var isApplying = false
     @Published var alert: AppAlert?
@@ -67,8 +68,18 @@ final class AppState: ObservableObject {
         }
     }
     func requestWiFiAuthorization() {
+        refreshNetworkServices()
         WiFiAuthorization.shared.requestAuthorization { [weak self] in
             self?.refreshNetworkInfo()
+        }
+    }
+
+    func refreshNetworkServices() {
+        Task {
+            let services = await Task.detached(priority: .utility) {
+                (try? NetworkClient.services()) ?? []
+            }.value
+            networkServices = services.isEmpty ? [Self.defaultService] : services
         }
     }
     
@@ -82,30 +93,39 @@ final class AppState: ObservableObject {
     }
 
     func refreshNetworkInfo() {
+        let service = lastAppliedProfile?.service ?? Self.defaultService
         guard !isRefreshing else { return }
-        isRefreshing = true
 
         Task {
-            do {
-                let (info, wifi) = try await Task.detached(priority: .userInitiated) {
-                    let info = try NetworkClient.info(for: Self.defaultService)
-                    let wifi = NetworkClient.wifiStatus()
-                    return (info, wifi)
-                }.value
+            _ = await refreshNetworkInfoAndWait(for: service)
+        }
+    }
 
-                self.networkInfo = info
-                self.wifiSignal = wifi.signalStrength
-                self.wifiEncryption = wifi.encryption
-                self.wifiChannel = wifi.channel
-                self.wifiBand = wifi.band
-                self.isRefreshing = false
-            } catch {
-                self.isRefreshing = false
-                self.showError(
-                    title: "Could Not Refresh Network Status",
-                    error: error
-                )
-            }
+    @discardableResult
+    private func refreshNetworkInfoAndWait(for service: String) async -> NetworkInfo? {
+        while isRefreshing {
+            try? await Task.sleep(nanoseconds: 50_000_000)
+        }
+
+        isRefreshing = true
+        defer { isRefreshing = false }
+
+        do {
+            let (info, wifi) = try await Task.detached(priority: .userInitiated) {
+                let info = try NetworkClient.info(for: service)
+                let wifi = NetworkClient.wifiStatus()
+                return (info, wifi)
+            }.value
+
+            networkInfo = info
+            wifiSignal = wifi.signalStrength
+            wifiEncryption = wifi.encryption
+            wifiChannel = wifi.channel
+            wifiBand = wifi.band
+            return info
+        } catch {
+            showError(title: "Could Not Refresh Network Status", error: error)
+            return nil
         }
     }
 
@@ -212,17 +232,16 @@ final class AppState: ObservableObject {
                     try NetworkClient.apply(profile)
                 }.value
 
-                // configd applies changes asynchronously; give it a moment before
-                // reading state back, especially for static IP/DNS changes.
-                try? await Task.sleep(nanoseconds: 900_000_000) // 0.9s
-                self.refreshNetworkInfo()
-
-                // If we expected DNS servers but didn't see them yet, try once more
-                // after a slightly longer wait — static config can take a bit longer.
-                if !profile.dnsServers.isEmpty {
-                    try? await Task.sleep(nanoseconds: 1_200_000_000) // 1.2s
-                    if self.networkInfo.dnsServers.isEmpty {
-                        self.refreshNetworkInfo()
+                // Wait briefly for configd, then query the service that was changed.
+                // If the live address has not caught up yet, retry every 500 ms.
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                for attempt in 0..<8 {
+                    let info = await self.refreshNetworkInfoAndWait(for: profile.service)
+                    if let info, self.networkInfoMatches(info, profile: profile) {
+                        break
+                    }
+                    if attempt < 7 {
+                        try? await Task.sleep(nanoseconds: 500_000_000)
                     }
                 }
 
@@ -245,6 +264,22 @@ final class AppState: ObservableObject {
             }
         }
     }
+
+    private func networkInfoMatches(_ info: NetworkInfo, profile: Profile) -> Bool {
+        if profile.useDHCP {
+            guard info.ipAddress != "—", info.subnetMask != "—" else { return false }
+        } else if info.ipAddress != profile.ipAddress
+                    || info.subnetMask != profile.subnetMask
+                    || info.gateway != profile.gateway {
+            return false
+        }
+
+        if !profile.dnsServers.isEmpty && info.dnsServers != profile.dnsServers {
+            return false
+        }
+        return true
+    }
+
     private func reloadProfiles() {
         do {
             try profileStore.load()

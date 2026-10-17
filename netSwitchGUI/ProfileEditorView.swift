@@ -5,6 +5,7 @@ import AppKit
 
 struct ProfileEditorView: View {
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var appState: AppState
 
     let profile: Profile?
     let onSave: (Profile) -> Void
@@ -25,6 +26,7 @@ struct ProfileEditorView: View {
     @State private var subnetMask = ""
     @State private var gateway = ""
     @State private var dnsServers: [DNSEntry] = []
+    @State private var selectedService = AppState.defaultService
     @State private var showAdvanced = false
     @State private var draggingDNSID: UUID? = nil
 
@@ -35,10 +37,12 @@ struct ProfileEditorView: View {
         profile != nil
     }
 
-    /// The service an edit must preserve. `saveProfile` used to hardcode "Wi-Fi", which silently
-    /// converted an Ethernet profile (creatable via the CLI's `--service`) into a Wi-Fi one.
-    private var service: String {
-        profile?.service ?? AppState.defaultService
+    private var serviceOptions: [String] {
+        var services = appState.networkServices
+        if !services.contains(selectedService) {
+            services.insert(selectedService, at: 0)
+        }
+        return services
     }
 
     private var isValid: Bool {
@@ -72,6 +76,17 @@ struct ProfileEditorView: View {
                 }
             } header: {
                 Label("Profile", systemImage: "person.crop.circle.badge.checkmark")
+                    .font(.subheadline.weight(.semibold))
+            }
+
+            Section {
+                Picker("Network Adapter", selection: $selectedService) {
+                    ForEach(serviceOptions, id: \.self) { service in
+                        Text(service).tag(service)
+                    }
+                }
+            } header: {
+                Label("Network Adapter", systemImage: "network")
                     .font(.subheadline.weight(.semibold))
             }
 
@@ -164,15 +179,14 @@ struct ProfileEditorView: View {
             Section {
                 DisclosureGroup(isExpanded: $showAdvanced) {
                     HStack {
-                        Image(systemName: "Wi-Fi")
+                        Image(systemName: "network")
                             .foregroundStyle(.secondary)
                             .font(.caption)
-                        Text("Network Service")
+                        Text("Selected Adapter")
                         Spacer()
-                        Text(service)
+                        Text(selectedService)
                             .foregroundStyle(.secondary)
                             .font(.callout.weight(.medium))
-                        // TODO: Replace with Picker when multi-service support is added
                     }
                     .padding(.vertical, 4)
                 } label: {
@@ -208,6 +222,7 @@ struct ProfileEditorView: View {
         }
         .onAppear {
             loadProfile()
+            appState.refreshNetworkServices()
             if profile == nil { focusedField = .name }
         }
     }
@@ -372,6 +387,7 @@ struct ProfileEditorView: View {
     private func loadProfile() {
         guard let profile else { return }
         name = profile.name
+        selectedService = profile.service
         useDHCP = profile.useDHCP
         ipAddress = profile.ipAddress
         subnetMask = profile.subnetMask
@@ -387,7 +403,7 @@ struct ProfileEditorView: View {
         let savedProfile = Profile(
             id: profile?.id ?? UUID(),
             name: name.trimmingCharacters(in: .whitespacesAndNewlines),
-            service: service,
+            service: selectedService,
             useDHCP: useDHCP,
             ipAddress: useDHCP ? "" : ipAddress.trimmingCharacters(in: .whitespacesAndNewlines),
             subnetMask: useDHCP ? "" : subnetMask.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -512,7 +528,7 @@ private struct IPFieldRow: View {
 
 // MARK: - Left-to-Right, Left-Aligned Text Field (macOS)
 
-private struct LTRTextField: NSViewRepresentable {
+struct LTRTextField: NSViewRepresentable {
     @Binding var text: String
     var placeholder: String
 
