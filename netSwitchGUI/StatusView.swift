@@ -35,7 +35,7 @@ struct StatusView: View {
         }
         .background(Color(red: 0.975, green: 0.981, blue: 0.991))
         .navigationTitle("")
-        .onReceive(appState.$networkInfo.dropFirst()) { _ in
+        .onReceive(appState.networkInfoPublisher.dropFirst()) { _ in
             lastUpdated = Date()
         }
         .onAppear { appState.refreshNetworkInfo() }
