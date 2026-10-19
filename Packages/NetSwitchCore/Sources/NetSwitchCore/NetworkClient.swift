@@ -116,9 +116,14 @@ public enum NetworkClient {
             }
         }
 
-        if let dnsProtocol = SCNetworkServiceCopyProtocol(networkService, kSCNetworkProtocolTypeDNS),
-           let config = SCNetworkProtocolGetConfiguration(dnsProtocol) as? [String: Any],
-           let servers = config[kSCPropNetDNSServerAddresses as String] as? [String] {
+        let dnsStateKey = "State:/Network/Service/\(serviceID)/DNS"
+        if let dnsState = SCDynamicStoreCopyValue(store, dnsStateKey as CFString) as? [String: Any],
+           let servers = dnsState[kSCPropNetDNSServerAddresses as String] as? [String],
+           !servers.isEmpty {
+            info.dnsServers = servers
+        } else if let dnsProtocol = SCNetworkServiceCopyProtocol(networkService, kSCNetworkProtocolTypeDNS),
+                  let config = SCNetworkProtocolGetConfiguration(dnsProtocol) as? [String: Any],
+                  let servers = config[kSCPropNetDNSServerAddresses as String] as? [String] {
             info.dnsServers = servers
         }
 
