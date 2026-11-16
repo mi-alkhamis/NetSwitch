@@ -20,8 +20,10 @@ private struct SpeedTestDisplayResult: Identifiable, Codable {
 struct SpeedTestView: View {
     private static let historyStorageKey = "netSwitch.speedTestHistory.v1"
     private static let maximumHistoryCount = 100
+    private static let automaticServerID = "auto"
 
     @EnvironmentObject private var appState: AppState
+    @AppStorage("netSwitch.speedTestServerID") private var preferredServerID = automaticServerID
     @State private var isRunning = false
     @State private var progress = ""
     @State private var result: SpeedTestDisplayResult?
@@ -35,6 +37,11 @@ struct SpeedTestView: View {
     @State private var routeLatency: SpeedTestLatency?
     @State private var currentPublicIP: String?
     @State private var liveNetworkInfo: NetworkInfo?
+    @State private var speedTestServers: [SpeedTestServer] = [.cloudflare]
+    @State private var recommendedServer: SpeedTestServerRecommendation?
+    @State private var isLoadingServers = true
+    @State private var isCheckingServer = false
+    @State private var didLoadServers = false
     @State private var testTask: Task<Void, Never>?
 
     private var activeNetworkName: String {
@@ -64,6 +71,15 @@ struct SpeedTestView: View {
         return "Not connected"
     }
 
+    private var selectedSpeedTestServer: SpeedTestServer {
+        if preferredServerID == Self.automaticServerID {
+            return recommendedServer?.server ?? .cloudflare
+        }
+        return speedTestServers.first { $0.id == preferredServerID }
+            ?? recommendedServer?.server
+            ?? .cloudflare
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
@@ -81,7 +97,7 @@ struct SpeedTestView: View {
                 routeFingerprint
                 historySection
 
-                Text("Speed measurements use Cloudflare’s test network. Each run transfers about 12 MB; Cloudflare may process your public IP and test measurements for aggregated connection insights.")
+                Text("Speed measurements use the selected test server. Each run transfers about 12 MB. The selected server and Cloudflare’s public IP service receive your connection request and public IP address.")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -93,6 +109,13 @@ struct SpeedTestView: View {
         }
         .background(Color(red: 0.975, green: 0.981, blue: 0.991))
         .task { await refreshLiveRouteDetails() }
+        .onChange(of: preferredServerID) { _, _ in
+            selectedHistoryID = nil
+            result = nil
+            currentLatency = nil
+            routeLatency = nil
+            Task { await refreshSelectedServerLatency() }
+        }
         .confirmationDialog("Clear all saved speed tests?", isPresented: $showingClearHistoryConfirmation, titleVisibility: .visible) {
             Button("Clear All History", role: .destructive, action: clearHistory)
             Button("Cancel", role: .cancel) {}
@@ -102,28 +125,84 @@ struct SpeedTestView: View {
     }
 
     private var header: some View {
-        HStack(spacing: 14) {
-            Image(systemName: "speedometer")
-                .font(.system(size: 27, weight: .medium))
-                .foregroundStyle(Color.accentColor)
-                .frame(width: 48, height: 48)
-                .background(Color.accentColor.opacity(0.1), in: Circle())
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 14) {
+                Image(systemName: "speedometer")
+                    .font(.system(size: 27, weight: .medium))
+                    .foregroundStyle(Color.accentColor)
+                    .frame(width: 48, height: 48)
+                    .background(Color.accentColor.opacity(0.1), in: Circle())
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Speed Test")
-                    .font(.system(size: 26, weight: .bold))
-                Text("Check your internet speed, latency and connection quality.")
-                    .font(.system(size: 14))
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Speed Test")
+                        .font(.system(size: 26, weight: .bold))
+                    Text("Check your internet speed, latency and connection quality.")
+                        .font(.system(size: 14))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 12)
+                statusBadge
+                Button(action: toggleTest) {
+                    Label(isRunning ? "Stop Test" : "Start Test", systemImage: isRunning ? "stop.fill" : "play.fill")
+                        .frame(minWidth: 118)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(isRunning ? .red : .accentColor)
+            }
+
+            HStack(spacing: 10) {
+                Label("TEST SERVER", systemImage: "server.rack")
+                    .font(.system(size: 10, weight: .semibold))
+                    .tracking(0.55)
                     .foregroundStyle(.secondary)
+                Menu {
+                    Button {
+                        preferredServerID = Self.automaticServerID
+                    } label: {
+                        Label(
+                            "Best available · \(recommendedServer?.server.location ?? "Finding server…")",
+                            systemImage: preferredServerID == Self.automaticServerID ? "checkmark.circle.fill" : "sparkles"
+                        )
+                    }
+                    Divider()
+                    ForEach(speedTestServers) { server in
+                        Button {
+                            preferredServerID = server.id
+                        } label: {
+                            if preferredServerID == server.id {
+                                Label(server.name, systemImage: "checkmark")
+                            } else {
+                                Text(server.name)
+                            }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 7) {
+                        Text(selectedSpeedTestServer.name)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.system(size: 10, weight: .semibold))
+                    }
+                    .font(.system(size: 12, weight: .medium))
+                    .padding(.horizontal, 11)
+                    .padding(.vertical, 7)
+                    .background(.white.opacity(0.75), in: RoundedRectangle(cornerRadius: 8))
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.accentColor.opacity(0.15)))
+                }
+                .menuStyle(.borderlessButton)
+                .disabled(isRunning || isLoadingServers)
+                .help("Choose a speed test server")
+
+                if isLoadingServers || isCheckingServer {
+                    ProgressView().controlSize(.small)
+                } else if preferredServerID == Self.automaticServerID {
+                    Text("Recommended by lowest ping")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
             }
-            Spacer(minLength: 12)
-            statusBadge
-            Button(action: toggleTest) {
-                Label(isRunning ? "Stop Test" : "Start Test", systemImage: isRunning ? "stop.fill" : "play.fill")
-                    .frame(minWidth: 118)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(isRunning ? .red : .accentColor)
         }
     }
 
@@ -281,11 +360,11 @@ struct SpeedTestView: View {
             fingerprintCell(
                 "SERVER",
                 value: displayedServerName,
-                detail: (displayedRequestID).map { "CF-Ray · \($0)" },
+                detail: displayedRequestID.map { "Request ID · \($0)" },
                 symbol: "server.rack"
             )
             fingerprintDivider
-            fingerprintCell("SERVER LOCATION", value: displayedServerLocation.map { "Edge POP · \($0)" } ?? "—", detail: nil, symbol: "mappin.and.ellipse")
+            fingerprintCell("SERVER LOCATION", value: displayedServerLocation ?? selectedSpeedTestServer.location, detail: nil, symbol: "mappin.and.ellipse")
             fingerprintDivider
             fingerprintCell("CONNECTION", value: selectedHistoryID == nil ? connectionDescription : (result?.networkName ?? "—"), detail: "Interface · \(selectedHistoryID == nil ? activeInterfaceName : (result?.networkName ?? "—"))", symbol: "wifi")
         }
@@ -300,7 +379,7 @@ struct SpeedTestView: View {
 
     private var displayedServerName: String {
         if selectedHistoryID != nil { return result?.serverName ?? "—" }
-        return routeLatency?.serverName ?? currentLatency?.serverName ?? result?.serverName ?? "—"
+        return routeLatency?.serverName ?? currentLatency?.serverName ?? result?.serverName ?? selectedSpeedTestServer.name
     }
 
     private var displayedServerLocation: String? {
@@ -358,7 +437,7 @@ struct SpeedTestView: View {
             }
             ScrollView(.horizontal) {
                 VStack(spacing: 0) {
-                    historyRow(date: "DATE", download: "DOWNLOAD", upload: "UPLOAD", ping: "PING", jitter: "JITTER", server: "SERVER · CF-RAY", publicIP: "PUBLIC IP", profile: "PROFILE", network: "NETWORK", isHeader: true)
+                    historyRow(date: "DATE", download: "DOWNLOAD", upload: "UPLOAD", ping: "PING", jitter: "JITTER", server: "SERVER", publicIP: "PUBLIC IP", profile: "PROFILE", network: "NETWORK", isHeader: true)
                     Rectangle().fill(Color.accentColor.opacity(0.14)).frame(height: 1)
                     if history.isEmpty {
                         Text("Completed tests will be saved here on this Mac.")
@@ -375,7 +454,7 @@ struct SpeedTestView: View {
                                     upload: String(format: "%.1f Mbps", item.uploadMbps),
                                     ping: String(format: "%.1f ms", item.pingMilliseconds),
                                     jitter: String(format: "%.1f ms", item.jitterMilliseconds),
-                                    server: "\(item.serverName) · \(item.serverRequestID ?? "—")",
+                                    server: item.serverName,
                                     publicIP: item.publicIPAddress,
                                     profile: item.profileName,
                                     network: item.networkName,
@@ -457,22 +536,23 @@ struct SpeedTestView: View {
 
         let profileName = appState.lastAppliedProfile?.name ?? "No applied profile"
         let networkName = activeNetworkName
+        let testServer = selectedSpeedTestServer
 
         testTask = Task {
             do {
                 currentPublicIP = try? await SpeedTestClient.publicIPAddress()
                 progress = "Measuring ping and jitter…"
-                let latency = try await SpeedTestClient.measurePingAndJitter()
+                let latency = try await SpeedTestClient.measurePingAndJitter(server: testServer)
                 currentLatency = latency
                 routeLatency = latency
 
                 progress = "Measuring download speed…"
-                let download = try await SpeedTestClient.measureDownload { sample in
+                let download = try await SpeedTestClient.measureDownload(server: testServer) { sample in
                     downloadSamples.append(sample)
                 }
 
                 progress = "Measuring upload speed…"
-                let upload = try await SpeedTestClient.measureUpload { sample in
+                let upload = try await SpeedTestClient.measureUpload(server: testServer) { sample in
                     uploadSamples.append(sample)
                 }
 
@@ -555,6 +635,22 @@ struct SpeedTestView: View {
     }
 
     private func refreshLiveRouteDetails() async {
+        if currentPublicIP == nil {
+            currentPublicIP = try? await SpeedTestClient.publicIPAddress()
+        }
+        if !didLoadServers {
+            didLoadServers = true
+            isLoadingServers = true
+            speedTestServers = await SpeedTestClient.availableServers()
+            recommendedServer = await SpeedTestClient.recommendServer(from: speedTestServers)
+            if preferredServerID != Self.automaticServerID,
+               !speedTestServers.contains(where: { $0.id == preferredServerID }) {
+                preferredServerID = Self.automaticServerID
+            }
+            isLoadingServers = false
+            await refreshSelectedServerLatency()
+        }
+
         while !Task.isCancelled {
             appState.refreshNetworkInfo()
             let detectedInfo = await Task.detached(priority: .utility) {
@@ -575,15 +671,30 @@ struct SpeedTestView: View {
                 if let publicIP = try? await SpeedTestClient.publicIPAddress() {
                     currentPublicIP = publicIP
                 }
-                if let latency = try? await SpeedTestClient.measurePingAndJitter(sampleCount: 2) {
-                    routeLatency = latency
-                }
+                await refreshSelectedServerLatency(sampleCount: 2)
             }
             do {
                 try await Task.sleep(nanoseconds: 60_000_000_000)
             } catch {
                 break
             }
+        }
+    }
+
+    private func refreshSelectedServerLatency(sampleCount: Int = 2) async {
+        guard !isRunning, selectedHistoryID == nil else { return }
+        let server = selectedSpeedTestServer
+        isCheckingServer = true
+        defer { isCheckingServer = false }
+        if preferredServerID == Self.automaticServerID,
+           let recommendation = recommendedServer,
+           recommendation.server.id == server.id {
+            routeLatency = recommendation.latency
+        } else if let latency = try? await SpeedTestClient.measurePingAndJitter(
+            server: server,
+            sampleCount: sampleCount
+        ) {
+            routeLatency = latency
         }
     }
 }
