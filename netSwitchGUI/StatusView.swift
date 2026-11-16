@@ -216,7 +216,7 @@ struct StatusView: View {
             Spacer()
             Text(displayValue(value)).font(.system(size: 15, weight: .medium, design: .monospaced)).lineLimit(1)
                 .frame(width: 320, alignment: .leading)
-            copyButton(value)
+            copyButton(value, title: title)
         }
         .padding(.horizontal, 20).frame(height: 52)
     }
@@ -230,7 +230,7 @@ struct StatusView: View {
                 .background(Color.secondary.opacity(0.1), in: Circle())
             Text(server).font(.system(size: 15, weight: .medium, design: .monospaced))
             Spacer()
-            if let copyValue { copyButton(copyValue) }
+            if let copyValue { copyButton(copyValue, title: "DNS server") }
         }
         .padding(.horizontal, 20).frame(height: 56)
     }
@@ -239,8 +239,11 @@ struct StatusView: View {
         Rectangle().fill(Color.accentColor.opacity(0.12)).frame(height: 1).padding(.leading, 20)
     }
 
-    private func copyButton(_ value: String) -> some View {
-        Button { copyToClipboard(value) } label: {
+    private func copyButton(_ value: String, title: String) -> some View {
+        Button {
+            copyToClipboard(value)
+            appState.alert = AppAlert(kind: .success, title: "Copied: \(title)", message: "\(title) was copied to the clipboard.")
+        } label: {
             Image(systemName: "doc.on.doc").foregroundStyle(.secondary).frame(width: 28, height: 28)
         }
         .buttonStyle(.plain)
