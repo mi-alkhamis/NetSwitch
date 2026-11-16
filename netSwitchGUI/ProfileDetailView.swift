@@ -16,6 +16,7 @@ struct ProfileDetailView: View {
     @State private var gateway = ""
     @State private var dnsServers: [DNSDraft] = []
     @State private var draggingDNSID: UUID?
+    @State private var showingDeleteConfirmation = false
 
     private struct DNSDraft: Identifiable {
         let id = UUID()
@@ -53,12 +54,28 @@ struct ProfileDetailView: View {
         }
         .background(Color(red: 0.975, green: 0.981, blue: 0.991))
         .navigationTitle("")
+        .confirmationDialog(
+            "Delete \(profile.name)?",
+            isPresented: $showingDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Delete Profile", role: .destructive) {
+                appState.delete(profile)
+                isEditing = false
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This removes the profile from this Mac.")
+        }
         .onChange(of: profile.id) { _, _ in
             isEditing = false
         }
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 if isEditing {
+                    Button("Delete Profile", systemImage: "trash", role: .destructive) {
+                        showingDeleteConfirmation = true
+                    }
                     Button("Cancel", action: cancelEditing)
                     Button("Save Changes", action: saveChanges)
                         .disabled(!isValid)
