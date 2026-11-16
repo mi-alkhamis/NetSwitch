@@ -54,6 +54,7 @@ struct StatusView: View {
                     .overlay(Circle().stroke(Color.primary.opacity(0.09)))
             }
             .buttonStyle(.plain)
+            .focusEffectDisabled()
             .disabled(appState.isRefreshing)
             .help("Refresh network information")
         }
@@ -176,10 +177,9 @@ struct StatusView: View {
                 Label("Copy All Details", systemImage: "doc.on.doc")
                     .font(.system(size: 14, weight: .medium))
                     .padding(.horizontal, 12).padding(.vertical, 9)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 9))
-                    .overlay(RoundedRectangle(cornerRadius: 9).stroke(Color.primary.opacity(0.12)))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.bordered)
+            .help("Copy all network details")
         }
         .padding(.top, 2)
     }
@@ -269,6 +269,11 @@ struct StatusView: View {
             "Last updated: \(lastUpdatedText)"
         ].joined(separator: "\n")
         copyToClipboard(details)
+        appState.alert = AppAlert(
+            kind: .success,
+            title: "Details Copied",
+            message: "Network details were copied to the clipboard."
+        )
     }
 
     private func copyToClipboard(_ value: String) {
